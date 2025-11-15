@@ -2,8 +2,8 @@
 import lightning as L
 import os
 import argparse
-import mlflow
-from lightning.pytorch.loggers import MLFlowLogger
+import wandb
+from lightning.pytorch.loggers import WandbLogger
 from bio2token.data.collate_fn import PadAndStack, PadAndStackConfig
 from bio2token.models.autoencoder import Autoencoder, AutoencoderConfig
 from bio2token.data.dataset import DatasetModule, DatasetConfig
@@ -43,13 +43,10 @@ def main():
     # STEP 1: Load config yaml file
     global_configs = utilsyaml_to_dict(args.config)
 
-    # Add MLflow setup after loading config
-    tracking_uri = (
-        f"http://{global_configs['mlflow']['tracking_server_host']}:{global_configs['mlflow']['tracking_server_port']}"
-    )
-    mlflow.set_tracking_uri(tracking_uri)
-    mlflow.enable_system_metrics_logging()
-    print(f"MLflow tracking URI: {mlflow.get_tracking_uri()}")
+    # Start WandB logger (if desired). Use `wandb` config in YAML where available.
+    wandb_cfg = global_configs.get("wandb", {})
+    project = wandb_cfg.get("project", global_configs['infer'].get('experiment_name'))
+    entity = wandb_cfg.get("entity", None)
 
     # STEP 2: Instantiate model.
     model_config = pi_instantiate(AutoencoderConfig, yaml_dict=global_configs["model"])
@@ -84,23 +81,17 @@ def main():
         )
     ]
 
-    # STEP 7: Instantiate our trainer
-    runs = mlflow.search_runs()
-    if global_configs["infer"]["run_id"] not in runs["run_id"]:
-        run_id = None
+    # STEP 7: Instantiate our trainer and WandB logger
+    run_id = global_configs["infer"].get("run_id")
+    # If run_id provided, resume existing run; otherwise start a new run
+    if run_id is not None:
+        logger = WandbLogger(project=project, entity=entity, id=run_id, resume="allow")
     else:
-        run_id = global_configs["infer"]["run_id"]
-    logger = MLFlowLogger(
-        experiment_name=global_configs["infer"]["experiment_name"],
-        tracking_uri=tracking_uri,
-        run_id=run_id,
-    )
+        logger = WandbLogger(project=project, entity=entity)
     trainer = pi_instantiate(L.Trainer, yaml_dict=global_configs["lightning_trainer"], callbacks=callbacks, logger=logger)
 
-    # STEP 8: Test our model within MLflow run context
-    # check if run_id is already in mlflow
-    with mlflow.start_run(run_id=run_id):  # Use the same run_id as the trained model
-        trainer.test(model=sma, datamodule=dm, ckpt_path=ckpt_path)
+    # STEP 8: Test our model within WandB run context
+    trainer.test(model=sma, datamodule=dm, ckpt_path=ckpt_path)
 
 
 if __name__ == "__main__":

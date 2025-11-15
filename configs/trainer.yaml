@@ -26,7 +26,6 @@ optimizer:
     checkpoint_monitor: val_loss_epoch
     checkpoint_mode: min
 
-mlflow:
-  experiment_name: bio2token
-  tracking_server_host: 127.0.0.1 # "mlflow server --host 127.0.0.1 --port 8080"
-  tracking_server_port: 8080
+wandb:
+  project: bio2token
+  entity: null

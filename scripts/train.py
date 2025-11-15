@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import lightning as L
-from lightning.pytorch.loggers import MLFlowLogger
+from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
-import mlflow
+import wandb
 import os
 import argparse
 from bio2token.utils.callbacks import CustomProgressBar, StopOnNaNCallback
@@ -45,14 +45,13 @@ def main():
     # STEP 1: Load config yaml file
     global_configs = utilsyaml_to_dict(args.config)
 
-    # STEP 2: Start mlflow
-    tracking_uri = (
-        f"http://{global_configs['mlflow']['tracking_server_host']}:{global_configs['mlflow']['tracking_server_port']}"
-    )
-    experiment_name = global_configs["mlflow"]["experiment_name"]
-    mlflow.set_tracking_uri(tracking_uri)
-    mlflow.enable_system_metrics_logging()
-    print(f"MLflow tracking URI: {mlflow.get_tracking_uri()}")
+    # STEP 2: Start Weights & Biases (WandB) logger
+    # Config section `wandb` in YAML should provide at least `project`.
+    wandb_cfg = global_configs.get("wandb", {})
+    project = wandb_cfg.get("project", "bio2token")
+    entity = wandb_cfg.get("entity", None)
+    # instantiate WandB logger (this starts a run)
+    logger = WandbLogger(project=project, entity=entity)
 
     # STEP 3: Instantiate model.
     model_config = pi_instantiate(AutoencoderConfig, yaml_dict=global_configs["model"])
@@ -69,15 +68,14 @@ def main():
     optimizer_config = pi_instantiate(OptimizerConfig, yaml_dict=global_configs["optimizer"])
     sma = NetworkModule(config=optimizer_config, model=model)
 
-    # STEP 6: Get our version and logger.
-    logger = MLFlowLogger(experiment_name=experiment_name, tracking_uri=tracking_uri)
+    # STEP 6: Get our logger. WandB run already started when WandbLogger was created.
     print("{epoch:04d}" + "-{" + optimizer_config.checkpointing.checkpoint_monitor + ":.2f}-best-checkpoint")
     # STEP 7: Add our callbacks. We no longer automatically add any callbacks, so any that you want need to be explicitly added.
     callbacks = [
         CustomProgressBar(),
         StopOnNaNCallback(),
         ModelCheckpoint(
-            dirpath=f"{optimizer_config.checkpointing.checkpoint_dir}/{experiment_name}/{logger.run_id}",  # Directory to save checkpoints
+            dirpath=f"{optimizer_config.checkpointing.checkpoint_dir}/{project}/{logger.experiment.id}",  # Directory to save checkpoints
             filename="{epoch:04d}" + "-{" + optimizer_config.checkpointing.checkpoint_monitor + ":.2f}-best-checkpoint",
             save_top_k=optimizer_config.checkpointing.checkpoint_k_best_to_save,  # Save only the best model
             monitor=optimizer_config.checkpointing.checkpoint_monitor,  # Monitor a specific metric
@@ -95,21 +93,26 @@ def main():
     )
 
     # STEP 9: Train our model, with continue training if requested.
-    # if we want to start from a specific checkpoint instead of from scratch, this will grab it from mlflow - need to specify run_id in the config for now.
+    # if we want to start from a specific checkpoint instead of from scratch, this will grab it from the logged runs - specify run_id in the config for now.
     if optimizer_config.continue_training and optimizer_config.pretrained_model.run_id is not None:
-        ckpt_path = f"{optimizer_config.pretrained_model.checkpoint_dir}/{experiment_name}/{optimizer_config.pretrained_model.run_id}/last.ckpt"
+        ckpt_path = f"{optimizer_config.pretrained_model.checkpoint_dir}/{project}/{optimizer_config.pretrained_model.run_id}/last.ckpt"
         if optimizer_config.pretrained_model.checkpoint_type == "best":
             ckpt_path = find_lowest_val_loss_checkpoint(
-                checkpoint_dir=f"{optimizer_config.pretrained_model.checkpoint_dir}/{experiment_name}/{optimizer_config.pretrained_model.run_id}",
+                checkpoint_dir=f"{optimizer_config.pretrained_model.checkpoint_dir}/{project}/{optimizer_config.pretrained_model.run_id}",
                 checkpoint_monitor=optimizer_config.pretrained_model.checkpoint_monitor,
                 checkpoint_mode=optimizer_config.pretrained_model.checkpoint_mode,
             )
     else:
         ckpt_path = None
 
-    with mlflow.start_run(run_id=logger.run_id):
-        mlflow.log_params(flatten_config(global_configs))
-        trainer.fit(model=sma, datamodule=dm, ckpt_path=ckpt_path)
+    # Log flattened configuration into WandB config and start training
+    try:
+        # logger.experiment is the wandb run
+        logger.experiment.config.update(flatten_config(global_configs))
+    except Exception:
+        # fallback
+        wandb.config.update(flatten_config(global_configs))
+    trainer.fit(model=sma, datamodule=dm, ckpt_path=ckpt_path)
 
 
 if __name__ == "__main__":

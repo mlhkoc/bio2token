@@ -7,7 +7,7 @@ Bio2Token is a deep learning-based autoencoder designed for quantizing any biolo
 ## Table of Contents
 
 1. [Setup Guide](#setup-guide)
-2. [MLflow Server](#mlflow-server)
+2. [Weights & Biases (WandB)](#weights--biases-wandb)
 3. [Model Architecture](#model-architecture)
 4. [Datasets](#datasets)
 5. [Training](#training)
@@ -25,20 +25,22 @@ To manage environments efficiently, we use [uv](https://docs.astral.sh/uv/gettin
     uv sync
     ```
 
-## MLflow Server
+## Weights & Biases (WandB)
 
-We utilize [MLflow](https://mlflow.org/docs/latest/getting-started/intro-quickstart) for tracking model metrics, experiments, and parameters. To start the MLflow server, use the command below and access the monitoring interface at [http://localhost:8080](http://localhost:8080):
+This project uses Weights & Biases (WandB) for experiment tracking. Create a project on WandB (https://wandb.ai/) and optionally set an `entity` for your team or user account. You can configure the WandB project in `configs/trainer.yaml` under the `wandb` key.
 
-```bash
-mlflow server --host 127.0.0.1 --port 8080
+Example config (in `configs/trainer.yaml`):
+
+```yaml
+wandb:
+  project: bio2token
+  entity: null
 ```
 
-Update the MLflow server configuration as needed in `configs/trainer.yaml`:
-```yaml
-mlflow:
-  experiment_name: bio2token
-  tracking_server_host: 127.0.0.1
-  tracking_server_port: 8080
+If you haven't already, login locally using:
+
+```bash
+wandb login
 ```
 
 ## Model Architecture
