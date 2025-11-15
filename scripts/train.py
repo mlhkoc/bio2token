@@ -51,7 +51,15 @@ def main():
     project = wandb_cfg.get("project", "bio2token")
     entity = wandb_cfg.get("entity", None)
     # instantiate WandB logger (this starts a run)
-    logger = WandbLogger(project=project, entity=entity)
+    # log_model=True logs model parameters; save_code=True logs source code
+    # log_frequency=0 disables system metrics (CPU, GPU, memory)
+    logger = WandbLogger(
+        project=project, 
+        entity=entity, 
+        log_model=True,
+        save_code=True,
+        log_frequency=0
+    )
 
     # STEP 3: Instantiate model.
     model_config = pi_instantiate(AutoencoderConfig, yaml_dict=global_configs["model"])

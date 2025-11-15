@@ -1,7 +1,7 @@
 lightning_trainer:
   enable_progress_bar: True
-  limit_train_batches: 500 # epoch_train_samples // batch_size_per_gpu
-  limit_val_batches: 50 # epoch_val_samples // batch_size_per_gpu
+  limit_train_batches: 1.0 # Use full dataset per epoch
+  limit_val_batches: 1.0 # Use full dataset per validation
   log_every_n_steps: 1 # tb_log_frequency
   num_sanity_val_steps: 0 # sanity_val_steps
   max_epochs: 2000 # n_epochs
