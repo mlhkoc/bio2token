@@ -84,23 +84,29 @@ def main():
     # STEP 7: Instantiate our trainer and WandB logger
     run_id = global_configs["infer"].get("run_id")
     # If run_id provided, resume existing run; otherwise start a new run
-    # log_model=True logs model parameters; log_frequency=0 disables system metrics
+    # disable WandB system metrics collection via env var
+    os.environ.setdefault("WANDB_DISABLE_SYSTEM_METRICS", "1")
     if run_id is not None:
         logger = WandbLogger(
-            project=project, 
-            entity=entity, 
-            id=run_id, 
+            project=project,
+            entity=entity,
+            id=run_id,
             resume="allow",
             log_model=True,
-            log_frequency=0
         )
     else:
         logger = WandbLogger(
-            project=project, 
+            project=project,
             entity=entity,
             log_model=True,
-            log_frequency=0
         )
+
+    # request wandb to watch the underlying model (log parameters & gradients) if possible
+    try:
+        logger.experiment.watch(model, log="all")
+    except Exception:
+        pass
+
     trainer = pi_instantiate(L.Trainer, yaml_dict=global_configs["lightning_trainer"], callbacks=callbacks, logger=logger)
 
     # STEP 8: Test our model within WandB run context

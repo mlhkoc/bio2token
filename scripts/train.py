@@ -50,20 +50,29 @@ def main():
     wandb_cfg = global_configs.get("wandb", {})
     project = wandb_cfg.get("project", "bio2token")
     entity = wandb_cfg.get("entity", None)
+    # disable WandB system metrics collection (CPU/GPU/memory) via env var
+    # This avoids passing unsupported args to wandb.init
+    os.environ.setdefault("WANDB_DISABLE_SYSTEM_METRICS", "1")
     # instantiate WandB logger (this starts a run)
-    # log_model=True logs model parameters; save_code=True logs source code
-    # log_frequency=0 disables system metrics (CPU, GPU, memory)
+    # log_model=True enables model artifact integration; save_code=True logs source code
     logger = WandbLogger(
-        project=project, 
-        entity=entity, 
+        project=project,
+        entity=entity,
         log_model=True,
         save_code=True,
-        log_frequency=0
     )
 
     # STEP 3: Instantiate model.
     model_config = pi_instantiate(AutoencoderConfig, yaml_dict=global_configs["model"])
     model = Autoencoder(model_config)
+
+    # Ask wandb to watch the model so parameters/gradients are logged (safe if wandb available)
+    try:
+        # logger.experiment triggers wandb.init() and returns the run object
+        logger.experiment.watch(model, log="all")
+    except Exception:
+        # if wandb isn't available or watch fails, continue silently
+        pass
 
     # STEP 4: Instantiate our datamodule and collate function
     data_config = pi_instantiate(DatasetConfig, yaml_dict=global_configs["data"])
